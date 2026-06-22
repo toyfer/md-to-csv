@@ -41,15 +41,10 @@
             padding: 0.5rem 0.8rem; font-size: 0.85rem; border-radius: 8px;
         }
         .btn-outline.active { background: #667eea; color: white; }
-        .mode-selector {
-            display: flex; gap: 0.4rem; margin: 0.8rem 0; flex-wrap: wrap;
-        }
+        .mode-selector { display: flex; gap: 0.4rem; margin: 0.8rem 0; flex-wrap: wrap; }
         .preview-section { display: none; }
         .preview-section.active { display: block; }
-        .tabs {
-            display: flex; gap: 0; margin-bottom: 0.8rem;
-            border-bottom: 2px solid #e0e0e0;
-        }
+        .tabs { display: flex; gap: 0; margin-bottom: 0.8rem; border-bottom: 2px solid #e0e0e0; }
         .tab {
             padding: 0.6rem 0.8rem; border: none; background: none;
             font-size: 0.9rem; color: #666;
@@ -130,18 +125,13 @@
         var zone = $('uploadZone'), input = $('fileInput'), info = $('fileInfo'),
             errEl = $('errorMessage'), preview = $('previewSection'), loading = $('loading');
 
-        // --- Event Listeners ---
         $('selectBtn').addEventListener('click', function(e) { e.stopPropagation(); input.click(); });
         zone.addEventListener('click', function(e) { if (e.target.tagName !== 'BUTTON') input.click(); });
-
-        // Mobile touch feedback
         zone.addEventListener('touchstart', function() { zone.classList.add('tap'); }, {passive:true});
         zone.addEventListener('touchend', function() { zone.classList.remove('tap'); }, {passive:true});
-
         input.addEventListener('change', function(e) {
             if (e.target.files.length) handleFile(e.target.files[0]);
         });
-
         document.querySelectorAll('.tab').forEach(function(t) {
             t.addEventListener('click', function() { switchTab(t.dataset.tab); });
         });
@@ -157,7 +147,6 @@
         $('copyBtn').addEventListener('click', copyCSV);
         $('resetBtn').addEventListener('click', reset);
 
-        // --- File Handler ---
         function handleFile(file) {
             hideErr();
             var ext = '.' + file.name.split('.').pop().toLowerCase();
@@ -179,46 +168,56 @@
             loading.classList.remove('active');
             info.innerHTML = '<strong>' + file.name + '</strong> (' + fmt(file.size) + ')';
             info.style.display = 'block';
-
             modeData.memo = parseMemo(content);
             modeData.table = parseTables(content);
             modeData.line = parseLine(content);
             modeData.flat = content.split('\n').filter(function(l) { return l.trim(); });
-
-            // Auto-select: MEMO format if it has entries, otherwise pick best
-            if (modeData.memo.length > 0) {
-                currentMode = 'memo';
-            } else if (modeData.line.length > 0) {
-                currentMode = 'line';
-            } else if (modeData.table.reduce(function(a,t){return a+t.length},0) > 0) {
-                currentMode = 'table';
-            } else {
-                currentMode = 'flat';
-            }
-
+            if (modeData.memo.length > 0) currentMode = 'memo';
+            else if (modeData.line.length > 0) currentMode = 'line';
+            else if (modeData.table.reduce(function(a,t){return a+t.length},0) > 0) currentMode = 'table';
+            else currentMode = 'flat';
             document.querySelectorAll('[data-mode]').forEach(function(b) {
                 b.classList.toggle('active', b.dataset.mode === currentMode);
             });
-
             render();
             $('originalPreview').textContent = content;
             preview.classList.add('active');
             switchTab('preview');
         }
 
-        // --- MEMO Parser ---
-        // MEMO format:
-        //   # MEMO
-        //   - **label** or - 2025/11/7
-        //       event title (plain text, indented)
-        //       - detail bullet
-        //       - detail bullet
-        //         continuation text
+        /*
+         * MEMO Parser (FIXED v3)
+         *
+         * MEMO format structure:
+         *   # MEMO
+         *   - **section label**          ← top-level bullet = section
+         *       plain text               ← indented = event title (after blank line)
+         *       - detail bullet          ← indented sub-bullet = detail
+         *         continuation text      ← indented non-bullet (no blank before) = detail continuation
+         *       - another detail
+         *           - sub-detail         ← deeper indent = still a detail
+         *
+         *   - 2025/11/7                  ← date section
+         *       event 1 title
+         *       - detail A
+         *       - detail B
+         *       event 2 title            ← new event (after blank line)
+         *       - detail C
+         *
+         * Key fixes:
+         *   1. Blank-line tracking: new event only after blank line, not after every indented text
+         *   2. Sections with only details (no event text) are NOT skipped
+         *   3. Multiple events under same section are correctly split
+         *   4. HTML tags like <aside> are skipped
+         */
         function parseMemo(md) {
             var lines = md.split('\n');
             var entries = [];
-            var curSection = null, curEvent = null, curDetails = [];
+            var curSection = null;
+            var curEvent = null;
+            var curDetails = [];
             var curDetailText = '';
+            var sawBlank = true;
 
             function flushDetail() {
                 if (curDetailText) {
@@ -228,10 +227,11 @@
             }
             function flushEvent() {
                 flushDetail();
-                if (curEvent) {
+                // ★ FIX: push entry even if curEvent is null but details exist
+                if (curEvent !== null || curDetails.length > 0) {
                     entries.push({
                         section: curSection || '',
-                        event: curEvent,
+                        event: curEvent || '',
                         details: curDetails.slice()
                     });
                 }
@@ -245,57 +245,68 @@
 
             for (var i = 0; i < lines.length; i++) {
                 var rawLine = lines[i];
-                if (!rawLine.trim()) continue;
+
+                // ★ FIX: track blank lines (don't just skip them)
+                if (!rawLine.trim()) {
+                    sawBlank = true;
+                    continue;
+                }
 
                 var indent = rawLine.search(/\S/);
                 var txt = rawLine.trim();
 
-                // Skip # MEMO header
-                if (indent === 0 && txt.match(/^#+\s*MEMO/i)) continue;
-                // Skip other # headers
-                if (indent === 0 && txt.startsWith('#')) continue;
+                // Skip HTML tags like <aside>, </aside>
+                if (txt.match(/^<\/?[a-z]+>$/i)) { sawBlank = false; continue; }
+
+                // Skip # headers
+                if (indent === 0 && txt.charAt(0) === '#') continue;
 
                 // Top-level bullet: - **label** or - 2025/11/7
-                if (indent === 0 && txt.startsWith('- ')) {
+                if (indent === 0 && txt.substring(0, 2) === '- ') {
                     flushSection();
                     curSection = txt.replace(/^-\s*/, '').replace(/\*\*/g, '').trim();
+                    sawBlank = true;
                     continue;
                 }
 
-                // Indented sub-bullet: - detail
-                if (indent > 0 && txt.startsWith('- ')) {
+                // Indented sub-bullet at any level: - detail
+                if (indent > 0 && txt.substring(0, 2) === '- ') {
                     flushDetail();
                     curDetailText = txt.replace(/^\s*-\s*/, '');
+                    sawBlank = false;
                     continue;
                 }
 
-                // Indented non-bullet: could be event title or continuation
+                // Indented non-bullet text
                 if (indent > 0) {
-                    if (!curEvent) {
-                        // This is an event title
+                    if (sawBlank) {
+                        // ★ FIX: new event only after blank line
+                        flushEvent();
                         curEvent = txt;
                     } else if (curDetailText) {
                         // Continuation of current detail
                         curDetailText += ' ' + txt;
+                    } else if (curEvent !== null) {
+                        // Continuation of event title
+                        curEvent += ' ' + txt;
                     } else {
-                        // Sub-event text or standalone detail
-                        flushDetail();
-                        curDetailText = txt;
+                        // First content under section (no blank line before)
+                        curEvent = txt;
                     }
+                    sawBlank = false;
                     continue;
                 }
 
-                // Non-indented, non-bullet: flush and skip
+                // Non-indented, non-bullet, non-header: flush section
                 if (indent === 0) {
                     flushSection();
+                    sawBlank = true;
                 }
             }
-
             flushSection();
             return entries;
         }
 
-        // --- Pipe Table Parser ---
         function parseTables(md) {
             var lines = md.split('\n'), tables = [];
             var cur = [], inT = false;
@@ -313,7 +324,6 @@
             return tables;
         }
 
-        // --- LINE Chat Parser ---
         function parseLine(c) {
             var lines = c.split('\n'), msgs = [];
             var dt = '', pending = null;
@@ -349,7 +359,6 @@
             return msgs;
         }
 
-        // --- CSV Escape ---
         function esc(t) {
             t = String(t)
                 .replace(/\*\*(.*?)\*\*/g, '$1')
@@ -369,7 +378,6 @@
             return d.innerHTML;
         }
 
-        // --- Render ---
         function render() {
             var mode = currentMode;
             var data = modeData[mode];
@@ -377,7 +385,6 @@
                 mode = 'flat';
                 data = modeData.flat;
             }
-
             var names = { memo: 'MEMO形式', table: 'テーブル', line: 'LINE形式', flat: '全文' };
             var rc = 0, cc = 0;
             if (mode === 'memo') {
@@ -393,21 +400,17 @@
                 rc = data.length;
                 cc = data.length * 2;
             }
-
             $('statsArea').innerHTML =
                 '<div class="stat-item"><div class="num">' + (names[mode] || '-') + '</div><div class="label">モード</div></div>' +
                 '<div class="stat-item"><div class="num">' + rc + '</div><div class="label">行数</div></div>' +
                 '<div class="stat-item"><div class="num">' + cc + '</div><div class="label">セル数</div></div>';
-
             if (mode === 'memo') { currentCSV = memo2csv(data); showMemo(data); }
             else if (mode === 'table') { currentCSV = tab2csv(data); showTable(data); }
             else if (mode === 'line') { currentCSV = line2csv(data); showLine(data); }
             else { currentCSV = flat2csv(data); showFlat(data); }
-
             $('csvPreview').textContent = currentCSV;
         }
 
-        // --- CSV Converters ---
         function memo2csv(entries) {
             var rows = ['セクション,イベント,詳細'];
             entries.forEach(function(e) {
@@ -425,7 +428,6 @@
             });
             return rows.join('\n');
         }
-
         function tab2csv(tables) {
             var rows = [];
             tables.forEach(function(t, i) {
@@ -436,7 +438,6 @@
             });
             return rows.join('\n');
         }
-
         function line2csv(msgs) {
             var rows = ['日付,時間,名前,メッセージ'];
             msgs.forEach(function(m) {
@@ -444,7 +445,6 @@
             });
             return rows.join('\n');
         }
-
         function flat2csv(lines) {
             var rows = ['行番号,内容'];
             lines.forEach(function(l, i) {
@@ -453,7 +453,6 @@
             return rows.join('\n');
         }
 
-        // --- Preview Renderers ---
         function showMemo(entries) {
             var c = $('tablePreview');
             if (!entries || !entries.length) { c.innerHTML = '<p style="padding:1rem;color:#999">MEMO形式のデータが見つかりませんでした</p>'; return; }
@@ -465,7 +464,6 @@
             h += '</tbody></table>';
             c.innerHTML = h;
         }
-
         function showTable(tables) {
             var c = $('tablePreview'); c.innerHTML = '';
             tables.forEach(function(t, i) {
@@ -488,7 +486,6 @@
                 e.appendChild(tb); c.appendChild(e);
             });
         }
-
         function showLine(msgs) {
             var c = $('tablePreview');
             if (!msgs || !msgs.length) { c.innerHTML = '<p style="padding:1rem;color:#999">LINE形式のデータが見つかりません</p>'; return; }
@@ -502,7 +499,6 @@
             h += '</tbody></table>';
             c.innerHTML = h;
         }
-
         function showFlat(lines) {
             var c = $('tablePreview');
             var h = '<table><thead><tr><th>行番号</th><th>内容</th></tr></thead><tbody>';
@@ -514,7 +510,6 @@
             c.innerHTML = h;
         }
 
-        // --- UI Helpers ---
         function switchTab(n) {
             document.querySelectorAll('.tab').forEach(function(t) { t.classList.toggle('active', t.dataset.tab === n); });
             document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.remove('active'); });
@@ -538,7 +533,7 @@
             }, 100);
         }
 
-        // Copy to clipboard (navigator.clipboard with fallback)
+        // Copy to clipboard (Safari fallback)
         function copyCSV() {
             if (!currentCSV) return;
             if (navigator.clipboard && navigator.clipboard.writeText) {
