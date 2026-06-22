@@ -4,120 +4,69 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Markdown → CSV 変換</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 2rem;
-            color: #333;
+            min-height: 100vh; padding: 2rem; color: #333;
         }
-        
         .container { max-width: 1200px; margin: 0 auto; }
-        
-        h1 {
-            color: white; text-align: center; margin-bottom: 2rem;
-            font-size: 2.5rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
-        }
-        
-        .card {
-            background: white; border-radius: 12px; padding: 2rem;
-            margin-bottom: 2rem; box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-        }
-        
-        .upload-zone {
-            border: 3px dashed #667eea; border-radius: 8px; padding: 3rem;
-            text-align: center; cursor: pointer; transition: all 0.3s; background: #f8f9ff;
-        }
-        
-        .upload-zone:hover, .upload-zone.dragover {
-            border-color: #764ba2; background: #f0f2ff; transform: scale(1.02);
-        }
-        
+        h1 { color: white; text-align: center; margin-bottom: 2rem; font-size: 2.5rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.2); }
+        .card { background: white; border-radius: 12px; padding: 2rem; margin-bottom: 2rem; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        .upload-zone { border: 3px dashed #667eea; border-radius: 8px; padding: 3rem; text-align: center; cursor: pointer; transition: all 0.3s; background: #f8f9ff; }
+        .upload-zone:hover, .upload-zone.dragover { border-color: #764ba2; background: #f0f2ff; transform: scale(1.02); }
         .upload-zone p { font-size: 1.2rem; color: #667eea; margin-bottom: 1rem; }
         .upload-zone small { color: #999; }
-        
         input[type="file"] { display: none; }
-        
-        .btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white; border: none; padding: 0.8rem 2rem; border-radius: 6px;
-            font-size: 1rem; cursor: pointer; transition: all 0.3s; margin: 0.5rem;
-        }
-        
-        .btn:hover {
-            transform: translateY(-2px); box-shadow: 0 5px 15px rgba(102,126,234,0.4);
-        }
-        
-        .btn-outline {
-            background: transparent; border: 2px solid #667eea; color: #667eea;
-        }
+        .btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 0.8rem 2rem; border-radius: 6px; font-size: 1rem; cursor: pointer; transition: all 0.3s; margin: 0.5rem; }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(102,126,234,0.4); }
+        .btn-outline { background: transparent; border: 2px solid #667eea; color: #667eea; }
         .btn-outline:hover { background: #667eea; color: white; }
         .btn-outline.active { background: #667eea; color: white; }
-        
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-        
         .mode-selector { display: flex; gap: 0.5rem; margin: 1rem 0; flex-wrap: wrap; }
         .preview-section { display: none; }
         .preview-section.active { display: block; }
-        
-        .tabs {
-            display: flex; gap: 0.5rem; margin-bottom: 1rem;
-            border-bottom: 2px solid #e0e0e0; flex-wrap: wrap;
-        }
-        
-        .tab {
-            padding: 0.8rem 1.5rem; cursor: pointer; border: none; background: none;
-            font-size: 1rem; color: #666;
-            border-bottom: 3px solid transparent; transition: all 0.3s;
-        }
+        .tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 2px solid #e0e0e0; flex-wrap: wrap; }
+        .tab { padding: 0.8rem 1.5rem; cursor: pointer; border: none; background: none; font-size: 1rem; color: #666; border-bottom: 3px solid transparent; transition: all 0.3s; }
         .tab.active { color: #667eea; border-bottom-color: #667eea; }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
-        
-        pre {
-            background: #f5f5f5; padding: 1rem; border-radius: 6px;
-            overflow-x: auto; font-size: 0.9rem; line-height: 1.5;
-            white-space: pre-wrap; word-break: break-all; max-height: 500px; overflow-y: auto;
-        }
-        
+        pre { background: #f5f5f5; padding: 1rem; border-radius: 6px; overflow-x: auto; font-size: 0.9rem; line-height: 1.5; white-space: pre-wrap; word-break: break-all; max-height: 500px; overflow-y: auto; }
         table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
         th, td { border: 1px solid #ddd; padding: 0.8rem; text-align: left; vertical-align: top; }
         th { background: #667eea; color: white; font-weight: 600; }
         tr:nth-child(even) { background: #f9f9f9; }
-        
         .actions { text-align: center; margin-top: 1.5rem; display: flex; justify-content: center; flex-wrap: wrap; }
-        
         .file-info { background: #e8f5e9; padding: 1rem; border-radius: 6px; margin-bottom: 1rem; color: #2e7d32; }
         .error { background: #ffebee; color: #c62828; padding: 1rem; border-radius: 6px; margin-bottom: 1rem; }
-        
         .table-separator { margin: 2rem 0 1rem; font-weight: bold; color: #667eea; font-size: 1.1rem; }
-        .detected-badge { display: inline-block; background: #e8f5e9; color: #2e7d32; padding: 0.3rem 0.8rem; border-radius: 12px; font-size: 0.85rem; margin-left: 0.5rem; }
-        
         .stats { display: flex; gap: 1rem; margin: 1rem 0; flex-wrap: wrap; }
         .stat-item { background: #f8f9ff; border-radius: 8px; padding: 0.8rem 1.2rem; text-align: center; flex: 1; min-width: 120px; }
         .stat-item .num { font-size: 1.5rem; font-weight: bold; color: #667eea; }
         .stat-item .label { font-size: 0.8rem; color: #666; }
+        .loading { display: none; text-align: center; padding: 2rem; }
+        .loading.active { display: block; }
+        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #667eea; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 1rem; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>📄 Markdown → CSV 変換</h1>
-        
         <div class="card">
             <div class="upload-zone" id="uploadZone">
-                <p>📁 Markdownファイルをドラッグ＆ドロップ</p>
+                <p>📁 Markdown / テキスト / Wordファイルをドラッグ＆ドロップ</p>
                 <p>または</p>
                 <button class="btn" id="selectBtn">ファイルを選択</button>
-                <input type="file" id="fileInput" accept=".md,.markdown,.txt">
-                <p style="margin-top: 1rem;"><small>対応形式: .md, .markdown, .txt</small></p>
+                <input type="file" id="fileInput" accept=".md,.markdown,.txt,.docx">
+                <p style="margin-top: 1rem;"><small>対応形式: .md, .markdown, .txt, .docx</small></p>
             </div>
+            <div id="loading" class="loading"><div class="spinner"></div><p>ファイルを処理中...</p></div>
             <div id="fileInfo" class="file-info" style="display: none;"></div>
             <div id="errorMessage" class="error" style="display: none;"></div>
         </div>
-        
         <div class="card preview-section" id="previewSection">
             <div class="mode-selector" id="modeSelector">
                 <button class="btn btn-outline active" data-mode="auto">🔍 自動判定</button>
@@ -127,63 +76,75 @@
                 <button class="btn btn-outline" data-mode="flat">📝 全文フラット</button>
             </div>
             <div id="statsArea" class="stats"></div>
-            
             <div class="tabs">
                 <button class="tab active" data-tab="preview">プレビュー</button>
                 <button class="tab" data-tab="csv">CSV</button>
-                <button class="tab" data-tab="original">元のMarkdown</button>
+                <button class="tab" data-tab="original">元のテキスト</button>
             </div>
-            
             <div id="previewTab" class="tab-content active"><div id="tablePreview"></div></div>
             <div id="csvTab" class="tab-content"><pre id="csvPreview"></pre></div>
             <div id="originalTab" class="tab-content"><pre id="originalPreview"></pre></div>
-            
             <div class="actions">
                 <button class="btn" id="downloadBtn">💾 CSVをダウンロード</button>
                 <button class="btn" id="resetBtn">🔄 別のファイルを変換</button>
             </div>
         </div>
     </div>
-
     <script>
         let currentCSV = '', currentFileName = '', currentMode = 'auto', rawContent = '';
         const modeData = {};
         const $ = id => document.getElementById(id);
-        const zone = $('uploadZone'), input = $('fileInput'), info = $('fileInfo'), err = $('errorMessage'), preview = $('previewSection');
-        
+        const zone = $('uploadZone'), input = $('fileInput'), info = $('fileInfo'), errEl = $('errorMessage'), preview = $('previewSection'), loading = $('loading');
+
         zone.addEventListener('click', e => { if (e.target.tagName !== 'BUTTON' && e.target.id !== 'selectBtn') input.click(); });
         zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
         zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
         zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('dragover'); if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]); });
         input.addEventListener('change', e => { if (e.target.files.length) handleFile(e.target.files[0]); });
-        
         document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
         document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
             document.querySelectorAll('[data-mode]').forEach(x => x.classList.remove('active'));
-            b.classList.add('active'); currentMode = b.dataset.mode;
-            if (rawContent) renderCurrentMode();
+            b.classList.add('active');
+            currentMode = b.dataset.mode;
+            if (rawContent) render();
         }));
         $('downloadBtn').addEventListener('click', downloadCSV);
         $('resetBtn').addEventListener('click', reset);
-        
-        function handleFile(file) {
+
+        async function handleFile(file) {
             hideErr();
             const ext = '.' + file.name.split('.').pop().toLowerCase();
-            if (!['.md','.markdown','.txt'].includes(ext)) return showErr('対応していないファイル形式です。');
+            if (!['.md','.markdown','.txt','.docx'].includes(ext)) return showErr('対応していないファイル形式です。.md, .markdown, .txt, .docx を選択してください。');
             currentFileName = file.name.replace(/\.[^/.]+$/, '') + '.csv';
-            const r = new FileReader();
-            r.onload = e => { rawContent = e.target.result; process(rawContent, file); };
-            r.onerror = () => showErr('読み込み失敗');
-            r.readAsText(file, 'UTF-8');
+            loading.classList.add('active');
+            try {
+                if (ext === '.docx') {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const result = await mammoth.extractRawText({ arrayBuffer });
+                    rawContent = result.value;
+                } else {
+                    rawContent = await new Promise((resolve, reject) => {
+                        const r = new FileReader();
+                        r.onload = e => resolve(e.target.result);
+                        r.onerror = () => reject(new Error('読み込み失敗'));
+                        r.readAsText(file, 'UTF-8');
+                    });
+                }
+                process(rawContent, file);
+            } catch (e) {
+                showErr('ファイルの処理に失敗しました: ' + e.message);
+            } finally {
+                loading.classList.remove('active');
+            }
         }
-        
+
         function process(content, file) {
-            info.innerHTML = '<strong>'+file.name+'</strong> ('+fmt(file.size)+') を読み込みました';
+            info.innerHTML = '<strong>' + file.name + '</strong> (' + fmt(file.size) + ') を読み込みました';
             info.style.display = 'block';
             modeData.table = parseTables(content);
             modeData.list = parseLists(content);
             modeData.line = parseLine(content);
-            modeData.flat = content.split('\n').filter(l=>l.trim());
+            modeData.flat = content.split('\n').filter(l => l.trim());
             currentMode = detect();
             document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === currentMode));
             render();
@@ -191,154 +152,250 @@
             preview.classList.add('active');
             switchTab('preview');
         }
-        
+
         function detect() {
-            const s = {table: modeData.table.reduce((a,t)=>a+t.length,0), list: modeData.list.length, line: modeData.line.length, flat: modeData.flat.length>0?1:0};
-            let best='flat', bestScore=0;
-            for (const [k,v] of Object.entries(s)) { if (v>bestScore) { bestScore=v; best=k; } }
+            const s = {
+                table: modeData.table.reduce((a, t) => a + t.length, 0),
+                list: modeData.list.length,
+                line: modeData.line.length,
+                flat: modeData.flat.length > 0 ? 1 : 0
+            };
+            let best = 'flat', bestScore = 0;
+            for (const [k, v] of Object.entries(s)) {
+                if (v > bestScore) { bestScore = v; best = k; }
+            }
             return best;
         }
-        
+
         function render() {
             let mode = currentMode;
+            // ★ FIX: auto モードのときは detect() を呼ぶ
+            if (mode === 'auto') mode = detect();
             let data = modeData[mode];
-            if (!data || !data.length) { mode='flat'; data=modeData.flat; currentMode='flat'; document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode)); }
-            const names={table:'パイプテーブル',list:'箇条書き',line:'LINE形式',flat:'全文'};
-            const rc = Array.isArray(data) ? (Array.isArray(data[0])?data.length:1) : 0;
-            const cc = Array.isArray(data) ? data.reduce((s,r)=>s+(Array.isArray(r)?r.length:1),0) : 0;
-            $('statsArea').innerHTML = '<div class="stat-item"><div class="num">'+(names[mode]||'その他')+'</div><div class="label">検出モード</div></div><div class="stat-item"><div class="num">'+rc+'</div><div class="label">行数</div></div><div class="stat-item"><div class="num">'+cc+'</div><div class="label">セル数</div></div>';
-            
-            if (mode==='table') { currentCSV = tab2csv(data); showTable(data); }
-            else if (mode==='list') { currentCSV = list2csv(data); showList(data); }
-            else if (mode==='line') { currentCSV = line2csv(data); showLine(data); }
+            if (!data || !data.length) {
+                mode = 'flat';
+                data = modeData.flat;
+            }
+            const names = { table: 'パイプテーブル', list: '箇条書き', line: 'LINE形式', flat: '全文' };
+            const rc = Array.isArray(data) ? (Array.isArray(data[0]) ? data.length : (data[0] && data[0].title !== undefined ? data.length : data.length)) : 0;
+            const cc = Array.isArray(data) ? data.reduce((s, r) => s + (Array.isArray(r) ? r.length : (r.details ? r.details.length + 1 : 1)), 0) : 0;
+            $('statsArea').innerHTML =
+                '<div class="stat-item"><div class="num">' + (names[mode] || 'その他') + '</div><div class="label">検出モード</div></div>' +
+                '<div class="stat-item"><div class="num">' + rc + '</div><div class="label">行数</div></div>' +
+                '<div class="stat-item"><div class="num">' + cc + '</div><div class="label">セル数</div></div>';
+            if (mode === 'table') { currentCSV = tab2csv(data); showTable(data); }
+            else if (mode === 'list') { currentCSV = list2csv(data); showList(data); }
+            else if (mode === 'line') { currentCSV = line2csv(data); showLine(data); }
             else { currentCSV = flat2csv(data); showFlat(data); }
             $('csvPreview').textContent = currentCSV;
         }
-        
+
+        // ---------- PIPE TABLE PARSER ----------
         function parseTables(md) {
-            const lines=md.split('\n'), tables=[]; let cur=[], inT=false;
+            const lines = md.split('\n'), tables = [];
+            let cur = [], inT = false;
             for (const l of lines) {
-                const t=l.trim();
-                if (t.startsWith('|')&&t.endsWith('|')&&t.length>1) {
-                    if (!inT) { inT=true; cur=[]; }
+                const t = l.trim();
+                if (t.startsWith('|') && t.endsWith('|') && t.length > 1) {
+                    if (!inT) { inT = true; cur = []; }
                     if (t.match(/^\|[\s\-:|]+\|$/)) continue;
-                    cur.push(t.split('|').slice(1,-1).map(c=>c.trim()));
-                } else { if (inT&&cur.length) { tables.push(cur); cur=[]; inT=false; } }
+                    cur.push(t.split('|').slice(1, -1).map(c => c.trim()));
+                } else {
+                    if (inT && cur.length) { tables.push(cur); cur = []; inT = false; }
+                }
             }
-            if (inT&&cur.length) tables.push(cur);
+            if (inT && cur.length) tables.push(cur);
             return tables;
         }
-        
+
+        // ---------- NESTED LIST PARSER (FIXED) ----------
         function parseLists(md) {
-            const lines=md.split('\n'), entries=[]; let cur=null, subs=[];
-            for (const rl of lines) {
-                if (!rl.trim()) continue;
-                const ind=rl.search(/\S/), txt=rl.trim();
-                if (ind===0&&txt.startsWith('- ')) {
-                    if (cur) entries.push({title:cur,details:[...subs]});
-                    cur=txt.replace(/^-\s*/,''); subs=[];
-                } else if (ind>0&&txt.startsWith('- ')) { subs.push(txt.replace(/^-\s*/,'')); }
-                else if (ind>0&&!txt.startsWith('-')&&subs.length) subs[subs.length-1]+=' '+txt;
-                else if (ind===0&&!txt.startsWith('-')&&cur) cur+=' '+txt;
+            const lines = md.split('\n'), entries = [];
+            let cur = null, subs = [];
+            for (const rawLine of lines) {
+                if (!rawLine.trim()) continue;
+                const ind = rawLine.search(/\S/);
+                const txt = rawLine.trim();
+                if (ind === 0 && txt.startsWith('- ')) {
+                    // Top-level bullet
+                    if (cur) entries.push({ title: cur, details: [...subs] });
+                    cur = txt.replace(/^-\s*/, '');
+                    subs = [];
+                } else if (ind === 0 && txt.startsWith('# ')) {
+                    // Markdown heading - skip
+                    continue;
+                } else if (ind > 0 && txt.startsWith('- ')) {
+                    // Sub-bullet
+                    subs.push(txt.replace(/^\s*-\s*/, ''));
+                } else if (ind > 0) {
+                    // ★ FIX: indented non-bullet content - capture as sub-item
+                    if (cur) {
+                        if (subs.length > 0) {
+                            // Append to last sub-item
+                            subs[subs.length - 1] += ' ' + txt;
+                        } else {
+                            // No sub-items yet - add as first detail
+                            subs.push(txt);
+                        }
+                    }
+                } else if (ind === 0 && cur) {
+                    // Non-indented, non-bullet line - append to title
+                    cur += ' ' + txt;
+                }
             }
-            if (cur) entries.push({title:cur,details:[...subs]});
+            if (cur) entries.push({ title: cur, details: [...subs] });
             return entries;
         }
-        
+
+        // ---------- LINE CHAT PARSER ----------
         function parseLine(c) {
-            const lines=c.split('\n'), msgs=[]; let dt='';
+            const lines = c.split('\n'), msgs = [];
+            let dt = '';
+            let pendingMsg = null;
             for (const l of lines) {
-                const t=l.trim(); if (!t) continue;
-                if (t.match(/^R?\d{1,2}\/\d{1,2}\/\d{1,2}(?:\([^)]+\))?$/)) { dt=t; continue; }
-                const m=t.match(/^(\d{1,2}:\d{2})\t(.+?)\t(.+)$/);
-                if (m) msgs.push({date:dt,time:m[1],name:m[2],message:m[3]});
+                const t = l.trim();
+                if (!t) continue;
+                // Date header: R7/11/08(土) or 2025/11/08
+                if (t.match(/^R?\d{1,2}\/\d{1,2}\/\d{1,2}(?:\([^)]+\))?$/)) {
+                    if (pendingMsg) { msgs.push(pendingMsg); pendingMsg = null; }
+                    dt = t;
+                    continue;
+                }
+                // LINE format: HH:MM\t名前\tメッセージ
+                const m = t.match(/^(\d{1,2}:\d{2})\t(.+?)\t(.+)$/);
+                if (m) {
+                    if (pendingMsg) msgs.push(pendingMsg);
+                    let msg = m[3];
+                    // Handle quoted multiline: "text\ntext"
+                    if (msg.startsWith('"') && !msg.endsWith('"')) {
+                        pendingMsg = { date: dt, time: m[1], name: m[2], message: msg.slice(1) };
+                    } else {
+                        if (msg.startsWith('"') && msg.endsWith('"')) msg = msg.slice(1, -1);
+                        msgs.push({ date: dt, time: m[1], name: m[2], message: msg });
+                    }
+                } else if (pendingMsg) {
+                    // Continuation of multiline message
+                    let line = t;
+                    if (line.endsWith('"')) {
+                        pendingMsg.message += '\n' + line.slice(0, -1);
+                        msgs.push(pendingMsg);
+                        pendingMsg = null;
+                    } else {
+                        pendingMsg.message += '\n' + line;
+                    }
+                }
             }
+            if (pendingMsg) msgs.push(pendingMsg);
             return msgs;
         }
-        
+
+        // ---------- CSV ESCAPE ----------
         function esc(t) {
-            t=String(t).replace(/\*\*(.*?)\*\*/g,'$1').replace(/\*(.*?)\*/g,'$1').replace(/`(.*?)`/g,'$1').replace(/\[(.*?)\]\(.*?\)/g,'$1').replace(/^#+\s*/gm,'').replace(/<[^>]+>/g,'');
-            return (t.includes(',')||t.includes('"')||t.includes('\n')) ? '"'+t.replace(/"/g,'""')+'"' : t.trim();
+            t = String(t)
+                .replace(/\*\*(.*?)\*\*/g, '$1')
+                .replace(/\*(.*?)\*/g, '$1')
+                .replace(/`(.*?)`/g, '$1')
+                .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+                .replace(/^#+\s*/gm, '')
+                .replace(/<[^>]+>/g, '');
+            if (t.includes(',') || t.includes('"') || t.includes('\n')) {
+                t = '"' + t.replace(/"/g, '""') + '"';
+            }
+            return t.trim();
         }
-        function ehtml(t) { const d=document.createElement('div'); d.textContent=t; return d.innerHTML; }
-        
+        function ehtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+
+        // ---------- CSV CONVERTERS ----------
         function tab2csv(tables) {
-            const rows=[];
-            tables.forEach((t,i)=>{ if(i>0&&rows.length) rows.push(''); t.forEach(r=>rows.push(r.map(c=>esc(c)).join(','))); });
+            const rows = [];
+            tables.forEach((t, i) => {
+                if (i > 0 && rows.length) rows.push('');
+                t.forEach(r => rows.push(r.map(c => esc(c)).join(',')));
+            });
             return rows.join('\n');
         }
         function list2csv(entries) {
-            const rows=[['タイトル','詳細']];
-            entries.forEach(e=>{ rows.push([esc(e.title), esc(e.details.join('; '))]); if(e.details.length>1) e.details.forEach(d=>rows.push(['',esc(d)])); });
-            return rows.map(r=>r.join(',')).join('\n');
+            const rows = [['タイトル', '詳細']];
+            entries.forEach(e => {
+                rows.push([esc(e.title), esc(e.details.join('; '))]);
+            });
+            return rows.map(r => r.join(',')).join('\n');
         }
         function line2csv(msgs) {
-            const rows=[['日付','時間','名前','メッセージ']];
-            msgs.forEach(m=>rows.push([esc(m.date),esc(m.time),esc(m.name),esc(m.message)]));
-            return rows.map(r=>r.join(',')).join('\n');
+            const rows = [['日付', '時間', '名前', 'メッセージ']];
+            msgs.forEach(m => rows.push([esc(m.date), esc(m.time), esc(m.name), esc(m.message)]));
+            return rows.map(r => r.join(',')).join('\n');
         }
         function flat2csv(lines) {
-            const rows=[['行番号','内容']];
-            lines.forEach((l,i)=>rows.push([String(i+1),esc(l)]));
-            return rows.map(r=>r.join(',')).join('\n');
+            const rows = [['行番号', '内容']];
+            lines.forEach((l, i) => rows.push([String(i + 1), esc(l)]));
+            return rows.map(r => r.join(',')).join('\n');
         }
-        
+
+        // ---------- PREVIEW RENDERERS ----------
         function showTable(tables) {
-            const c=$('tablePreview'); c.innerHTML='';
-            tables.forEach((t,i)=>{
-                if(!t.length) return;
-                if(tables.length>1) { const s=document.createElement('div'); s.className='table-separator'; s.textContent='テーブル '+(i+1); c.appendChild(s); }
-                const e=document.createElement('table'), th=document.createElement('thead'), hr=document.createElement('tr');
-                t[0].forEach(x=>{const th2=document.createElement('th'); th2.textContent=x; hr.appendChild(th2);});
+            const c = $('tablePreview'); c.innerHTML = '';
+            tables.forEach((t, i) => {
+                if (!t.length) return;
+                if (tables.length > 1) {
+                    const s = document.createElement('div'); s.className = 'table-separator'; s.textContent = 'テーブル ' + (i + 1); c.appendChild(s);
+                }
+                const e = document.createElement('table'), th = document.createElement('thead'), hr = document.createElement('tr');
+                t[0].forEach(x => { const th2 = document.createElement('th'); th2.textContent = x; hr.appendChild(th2); });
                 th.appendChild(hr); e.appendChild(th);
-                const tb=document.createElement('tbody');
-                for(let j=1;j<t.length;j++) { const tr=document.createElement('tr'); t[j].forEach(x=>{const td=document.createElement('td'); td.textContent=x; tr.appendChild(td);}); tb.appendChild(tr); }
+                const tb = document.createElement('tbody');
+                for (let j = 1; j < t.length; j++) { const tr = document.createElement('tr'); t[j].forEach(x => { const td = document.createElement('td'); td.textContent = x; tr.appendChild(td); }); tb.appendChild(tr); }
                 e.appendChild(tb); c.appendChild(e);
             });
         }
         function showList(entries) {
-            const c=$('tablePreview');
-            if(!entries||!entries.length) { c.innerHTML='<p>データがありません</p>'; return; }
-            let h='<table><thead><tr><th>タイトル</th><th>詳細</th></tr></thead><tbody>';
-            entries.forEach(e=>{h+='<tr><td>'+ehtml(e.title)+'</td><td>'+(e.details.length?e.details.map(d=>ehtml(d)).join('<br>'):'')+'</td></tr>';});
-            h+='</tbody></table>'; c.innerHTML=h;
+            const c = $('tablePreview');
+            if (!entries || !entries.length) { c.innerHTML = '<p>データがありません</p>'; return; }
+            let h = '<table><thead><tr><th>タイトル</th><th>詳細</th></tr></thead><tbody>';
+            entries.forEach(e => {
+                h += '<tr><td>' + ehtml(e.title) + '</td><td>' + (e.details.length ? e.details.map(d => ehtml(d)).join('<br>') : '') + '</td></tr>';
+            });
+            h += '</tbody></table>'; c.innerHTML = h;
         }
         function showLine(msgs) {
-            const c=$('tablePreview');
-            if(!msgs||!msgs.length) { c.innerHTML='<p>データがありません</p>'; return; }
-            let h='<table><thead><tr><th>日付</th><th>時間</th><th>名前</th><th>メッセージ</th></tr></thead><tbody>';
-            msgs.slice(0,200).forEach(m=>{h+='<tr><td>'+ehtml(m.date)+'</td><td>'+ehtml(m.time)+'</td><td>'+ehtml(m.name)+'</td><td>'+ehtml(m.message.substring(0,80))+(m.message.length>80?'...':'')+'</td></tr>';});
-            if(msgs.length>200) h+='<tr><td colspan="4">... 他 '+(msgs.length-200)+' 件</td></tr>';
-            h+='</tbody></table>'; c.innerHTML=h;
+            const c = $('tablePreview');
+            if (!msgs || !msgs.length) { c.innerHTML = '<p>データがありません</p>'; return; }
+            let h = '<table><thead><tr><th>日付</th><th>時間</th><th>名前</th><th>メッセージ</th></tr></thead><tbody>';
+            msgs.slice(0, 200).forEach(m => {
+                h += '<tr><td>' + ehtml(m.date) + '</td><td>' + ehtml(m.time) + '</td><td>' + ehtml(m.name) + '</td><td>' + ehtml(m.message.substring(0, 100)) + (m.message.length > 100 ? '...' : '') + '</td></tr>';
+            });
+            if (msgs.length > 200) h += '<tr><td colspan="4">... 他 ' + (msgs.length - 200) + ' 件</td></tr>';
+            h += '</tbody></table>'; c.innerHTML = h;
         }
         function showFlat(lines) {
-            const c=$('tablePreview');
-            let h='<table><thead><tr><th>行番号</th><th>内容</th></tr></thead><tbody>';
-            lines.slice(0,200).forEach((l,i)=>{h+='<tr><td>'+(i+1)+'</td><td>'+ehtml(l)+'</td></tr>';});
-            if(lines.length>200) h+='<tr><td colspan="2">... 他 '+(lines.length-200)+' 行</td></tr>';
-            h+='</tbody></table>'; c.innerHTML=h;
+            const c = $('tablePreview');
+            let h = '<table><thead><tr><th>行番号</th><th>内容</th></tr></thead><tbody>';
+            lines.slice(0, 200).forEach((l, i) => { h += '<tr><td>' + (i + 1) + '</td><td>' + ehtml(l) + '</td></tr>'; });
+            if (lines.length > 200) h += '<tr><td colspan="2">... 他 ' + (lines.length - 200) + ' 行</td></tr>';
+            h += '</tbody></table>'; c.innerHTML = h;
         }
-        
+
+        // ---------- UI HELPERS ----------
         function switchTab(n) {
-            document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===n));
-            document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
-            $(n+'Tab').classList.add('active');
+            document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === n));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            $(n + 'Tab').classList.add('active');
         }
         function downloadCSV() {
-            if(!currentCSV) return;
-            const bom=new Uint8Array([0xEF,0xBB,0xBF]), blob=new Blob([bom,currentCSV],{type:'text/csv;charset=utf-8;'});
-            const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=currentFileName; a.click();
+            if (!currentCSV) return;
+            const bom = new Uint8Array([0xEF, 0xBB, 0xBF]), blob = new Blob([bom, currentCSV], { type: 'text/csv;charset=utf-8;' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = currentFileName; a.click();
         }
         function reset() {
-            currentCSV=''; currentFileName=''; rawContent=''; input.value='';
-            info.style.display='none'; hideErr(); preview.classList.remove('active');
-            $('tablePreview').innerHTML=''; $('csvPreview').textContent=''; $('originalPreview').textContent=''; $('statsArea').innerHTML='';
-            document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode==='auto'));
-            currentMode='auto';
+            currentCSV = ''; currentFileName = ''; rawContent = ''; input.value = '';
+            info.style.display = 'none'; hideErr(); preview.classList.remove('active');
+            $('tablePreview').innerHTML = ''; $('csvPreview').textContent = ''; $('originalPreview').textContent = ''; $('statsArea').innerHTML = '';
+            document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === 'auto'));
+            currentMode = 'auto';
         }
-        function showErr(m){err.textContent=m; err.style.display='block';}
-        function hideErr(){err.style.display='none';}
-        function fmt(b){return b<1024?b+' B':b<1048576?(b/1024).toFixed(1)+' KB':(b/1048576).toFixed(1)+' MB';}
+        function showErr(m) { errEl.textContent = m; errEl.style.display = 'block'; }
+        function hideErr() { errEl.style.display = 'none'; }
+        function fmt(b) { return b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(1) + ' MB'; }
     </script>
 </body>
 </html>
