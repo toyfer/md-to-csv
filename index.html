@@ -44,6 +44,10 @@
         .mode-selector { display: flex; gap: 0.4rem; margin: 0.8rem 0; flex-wrap: wrap; }
         .preview-section { display: none; }
         .preview-section.active { display: block; }
+        .actions-top {
+            display: flex; justify-content: center; gap: 0.5rem; margin: 0.8rem 0;
+            flex-wrap: wrap; padding: 0.8rem; background: #f0f2ff; border-radius: 8px;
+        }
         .tabs { display: flex; gap: 0; margin-bottom: 0.8rem; border-bottom: 2px solid #e0e0e0; }
         .tab {
             padding: 0.6rem 0.8rem; border: none; background: none;
@@ -66,7 +70,6 @@
         th, td { border: 1px solid #ddd; padding: 0.5rem; text-align: left; vertical-align: top; font-size: 0.85rem; }
         th { background: #667eea; color: white; font-weight: 600; position: sticky; top: 0; }
         tr:nth-child(even) { background: #f9f9f9; }
-        .actions { display: flex; justify-content: center; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap; }
         .file-info { background: #e8f5e9; padding: 0.7rem; border-radius: 6px; margin-bottom: 0.8rem; color: #2e7d32; font-size: 0.85rem; }
         .stats { display: flex; gap: 0.5rem; margin: 0.8rem 0; flex-wrap: wrap; }
         .stat-item { background: #f8f9ff; border-radius: 8px; padding: 0.5rem 0.8rem; text-align: center; flex: 1; min-width: 90px; }
@@ -77,6 +80,7 @@
         .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #667eea; border-radius: 50%; width: 30px; height: 30px; animation: spin 0.8s linear infinite; margin: 0 auto 0.8rem; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .table-separator { margin: 1rem 0 0.5rem; font-weight: bold; color: #667eea; font-size: 0.95rem; }
+        .preview-notice { background: #fff3e0; color: #e65100; padding: 0.5rem 0.8rem; border-radius: 6px; font-size: 0.8rem; margin: 0.5rem 0; text-align: center; }
     </style>
 </head>
 <body>
@@ -101,6 +105,11 @@
                 <button class="btn btn-outline" data-mode="flat">📄 全文</button>
             </div>
             <div id="statsArea" class="stats"></div>
+            <div class="actions-top">
+                <button class="btn" id="downloadBtn">💾 ダウンロード</button>
+                <button class="btn" id="copyBtn" style="background:#43a047">📋 コピー</button>
+                <button class="btn" id="resetBtn" style="background:#78909c">🔄 リセット</button>
+            </div>
             <div class="tabs">
                 <button class="tab active" data-tab="preview">プレビュー</button>
                 <button class="tab" data-tab="csv">CSV</button>
@@ -109,16 +118,12 @@
             <div id="previewTab" class="tab-content active"><div class="table-wrap" id="tablePreview"></div></div>
             <div id="csvTab" class="tab-content"><pre id="csvPreview"></pre></div>
             <div id="originalTab" class="tab-content"><pre id="originalPreview"></pre></div>
-            <div class="actions">
-                <button class="btn" id="downloadBtn">💾 CSVダウンロード</button>
-                <button class="btn" id="copyBtn" style="background:#43a047">📋 コピー</button>
-                <button class="btn" id="resetBtn" style="background:#78909c">🔄 リセット</button>
-            </div>
         </div>
     </div>
     <script>
     (function() {
         'use strict';
+        var PREVIEW_LIMIT = 30;
         var currentCSV = '', currentFileName = '', currentMode = 'memo', rawContent = '';
         var modeData = {};
         function $(id) { return document.getElementById(id); }
@@ -185,31 +190,6 @@
             switchTab('preview');
         }
 
-        /*
-         * MEMO Parser (FIXED v3)
-         *
-         * MEMO format structure:
-         *   # MEMO
-         *   - **section label**          ← top-level bullet = section
-         *       plain text               ← indented = event title (after blank line)
-         *       - detail bullet          ← indented sub-bullet = detail
-         *         continuation text      ← indented non-bullet (no blank before) = detail continuation
-         *       - another detail
-         *           - sub-detail         ← deeper indent = still a detail
-         *
-         *   - 2025/11/7                  ← date section
-         *       event 1 title
-         *       - detail A
-         *       - detail B
-         *       event 2 title            ← new event (after blank line)
-         *       - detail C
-         *
-         * Key fixes:
-         *   1. Blank-line tracking: new event only after blank line, not after every indented text
-         *   2. Sections with only details (no event text) are NOT skipped
-         *   3. Multiple events under same section are correctly split
-         *   4. HTML tags like <aside> are skipped
-         */
         function parseMemo(md) {
             var lines = md.split('\n');
             var entries = [];
@@ -227,7 +207,6 @@
             }
             function flushEvent() {
                 flushDetail();
-                // ★ FIX: push entry even if curEvent is null but details exist
                 if (curEvent !== null || curDetails.length > 0) {
                     entries.push({
                         section: curSection || '',
@@ -245,59 +224,40 @@
 
             for (var i = 0; i < lines.length; i++) {
                 var rawLine = lines[i];
-
-                // ★ FIX: track blank lines (don't just skip them)
                 if (!rawLine.trim()) {
                     sawBlank = true;
                     continue;
                 }
-
                 var indent = rawLine.search(/\S/);
                 var txt = rawLine.trim();
-
-                // Skip HTML tags like <aside>, </aside>
                 if (txt.match(/^<\/?[a-z]+>$/i)) { sawBlank = false; continue; }
-
-                // Skip # headers
                 if (indent === 0 && txt.charAt(0) === '#') continue;
-
-                // Top-level bullet: - **label** or - 2025/11/7
                 if (indent === 0 && txt.substring(0, 2) === '- ') {
                     flushSection();
                     curSection = txt.replace(/^-\s*/, '').replace(/\*\*/g, '').trim();
                     sawBlank = true;
                     continue;
                 }
-
-                // Indented sub-bullet at any level: - detail
                 if (indent > 0 && txt.substring(0, 2) === '- ') {
                     flushDetail();
                     curDetailText = txt.replace(/^\s*-\s*/, '');
                     sawBlank = false;
                     continue;
                 }
-
-                // Indented non-bullet text
                 if (indent > 0) {
                     if (sawBlank) {
-                        // ★ FIX: new event only after blank line
                         flushEvent();
                         curEvent = txt;
                     } else if (curDetailText) {
-                        // Continuation of current detail
                         curDetailText += ' ' + txt;
                     } else if (curEvent !== null) {
-                        // Continuation of event title
                         curEvent += ' ' + txt;
                     } else {
-                        // First content under section (no blank line before)
                         curEvent = txt;
                     }
                     sawBlank = false;
                     continue;
                 }
-
-                // Non-indented, non-bullet, non-header: flush section
                 if (indent === 0) {
                     flushSection();
                     sawBlank = true;
@@ -453,11 +413,24 @@
             return rows.join('\n');
         }
 
+        // ★ Preview helpers: show last N items
+        function getPreviewSlice(arr) {
+            if (arr.length <= PREVIEW_LIMIT) return arr;
+            return arr.slice(arr.length - PREVIEW_LIMIT);
+        }
+        function makeNotice(total, shown) {
+            if (total <= shown) return '';
+            var skipped = total - shown;
+            return '<div class="preview-notice">📄 全' + total + '件中、末尾' + shown + '件を表示中（先頭' + skipped + '件省略）</div>';
+        }
+
         function showMemo(entries) {
             var c = $('tablePreview');
             if (!entries || !entries.length) { c.innerHTML = '<p style="padding:1rem;color:#999">MEMO形式のデータが見つかりませんでした</p>'; return; }
-            var h = '<table><thead><tr><th>セクション</th><th>イベント</th><th>詳細</th></tr></thead><tbody>';
-            entries.forEach(function(e) {
+            var shown = getPreviewSlice(entries);
+            var h = makeNotice(entries.length, shown.length);
+            h += '<table><thead><tr><th>セクション</th><th>イベント</th><th>詳細</th></tr></thead><tbody>';
+            shown.forEach(function(e) {
                 var detailHtml = e.details.length ? e.details.map(function(d) { return ehtml(d); }).join('<br>') : '';
                 h += '<tr><td>' + ehtml(e.section) + '</td><td>' + ehtml(e.event) + '</td><td>' + detailHtml + '</td></tr>';
             });
@@ -478,7 +451,14 @@
                 t[0].forEach(function(x) { var th2 = document.createElement('th'); th2.textContent = x; hr.appendChild(th2); });
                 th.appendChild(hr); e.appendChild(th);
                 var tb = document.createElement('tbody');
-                for (var j = 1; j < t.length; j++) {
+                var startIdx = t.length > PREVIEW_LIMIT ? t.length - PREVIEW_LIMIT : 1;
+                if (t.length > PREVIEW_LIMIT) {
+                    var notice = document.createElement('div');
+                    notice.className = 'preview-notice';
+                    notice.textContent = '📄 全' + (t.length - 1) + '行中、末尾' + (t.length - startIdx) + '行を表示中';
+                    c.appendChild(notice);
+                }
+                for (var j = startIdx; j < t.length; j++) {
                     var tr = document.createElement('tr');
                     t[j].forEach(function(x) { var td = document.createElement('td'); td.textContent = x; tr.appendChild(td); });
                     tb.appendChild(tr);
@@ -489,23 +469,26 @@
         function showLine(msgs) {
             var c = $('tablePreview');
             if (!msgs || !msgs.length) { c.innerHTML = '<p style="padding:1rem;color:#999">LINE形式のデータが見つかりません</p>'; return; }
-            var h = '<table><thead><tr><th>日付</th><th>時間</th><th>名前</th><th>メッセージ</th></tr></thead><tbody>';
-            msgs.slice(0, 200).forEach(function(m) {
-                var msg = m.message.substring(0, 80);
-                if (m.message.length > 80) msg += '...';
+            var shown = getPreviewSlice(msgs);
+            var h = makeNotice(msgs.length, shown.length);
+            h += '<table><thead><tr><th>日付</th><th>時間</th><th>名前</th><th>メッセージ</th></tr></thead><tbody>';
+            shown.forEach(function(m) {
+                var msg = m.message.substring(0, 100);
+                if (m.message.length > 100) msg += '...';
                 h += '<tr><td>' + ehtml(m.date) + '</td><td>' + ehtml(m.time) + '</td><td>' + ehtml(m.name) + '</td><td>' + ehtml(msg) + '</td></tr>';
             });
-            if (msgs.length > 200) h += '<tr><td colspan="4">... 他 ' + (msgs.length - 200) + ' 件</td></tr>';
             h += '</tbody></table>';
             c.innerHTML = h;
         }
         function showFlat(lines) {
             var c = $('tablePreview');
-            var h = '<table><thead><tr><th>行番号</th><th>内容</th></tr></thead><tbody>';
-            lines.slice(0, 200).forEach(function(l, i) {
-                h += '<tr><td>' + (i + 1) + '</td><td>' + ehtml(l) + '</td></tr>';
+            var shown = getPreviewSlice(lines);
+            var offset = lines.length - shown.length;
+            var h = makeNotice(lines.length, shown.length);
+            h += '<table><thead><tr><th>行番号</th><th>内容</th></tr></thead><tbody>';
+            shown.forEach(function(l, i) {
+                h += '<tr><td>' + (offset + i + 1) + '</td><td>' + ehtml(l) + '</td></tr>';
             });
-            if (lines.length > 200) h += '<tr><td colspan="2">... 他 ' + (lines.length - 200) + ' 行</td></tr>';
             h += '</tbody></table>';
             c.innerHTML = h;
         }
@@ -516,7 +499,6 @@
             $(n + 'Tab').classList.add('active');
         }
 
-        // Safari-compatible download
         function downloadCSV() {
             if (!currentCSV) return;
             var bom = '\uFEFF';
@@ -533,7 +515,6 @@
             }, 100);
         }
 
-        // Copy to clipboard (Safari fallback)
         function copyCSV() {
             if (!currentCSV) return;
             if (navigator.clipboard && navigator.clipboard.writeText) {
